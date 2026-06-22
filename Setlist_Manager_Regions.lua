@@ -497,13 +497,25 @@ end
 local function play_entry(e)
   if not e then return end
   local r = (R(e.region_idx) or R_by_name(e.name)); if not r then return end
-  local playing = select(1, get_play_state())
-  local pos = reaper.GetCursorPosition()
-  if pos > r.start and pos < (r.fin - TIME_EPS) then
-    if not playing then reaper.OnPlayButton() end
+  local playing, paused = get_play_state()
+  local pos = (reaper.GetPlayPosition and reaper.GetPlayPosition()) or reaper.GetCursorPosition()
+  if paused or not playing then
+    pos = reaper.GetCursorPosition()
+  end
+
+  if pos >= r.start and pos < (r.fin - TIME_EPS) then
+    if paused then
+      reaper.OnPauseButton() -- Resume play
+    elseif not playing then
+      reaper.OnPlayButton()
+    end
   else
     reaper.SetEditCurPos(r.start, true, true)
-    if not playing then reaper.OnPlayButton() end
+    if paused then
+      reaper.OnPauseButton()
+    elseif not playing then
+      reaper.OnPlayButton()
+    end
   end
   is_playing = true
 end
@@ -665,18 +677,22 @@ end
 local function handle_remote()
   local cmd = reaper.GetExtState(REMOTE_KEY, "cmd")
   if not cmd or cmd == "" then return end
+  local playing, paused = get_play_state()
   if cmd == "play_toggle" then
-    if is_playing then
+    if playing then
       local e = setlist.entries[current]
-      if e and e.loop then next_song(true) else stop_play() end
+      if e and e.loop then next_song(true) else reaper.OnPauseButton() end
     else
       play_entry(setlist.entries[current])
     end
   elseif cmd == "play" then
     local e = setlist.entries[current]
-    if is_playing and e and e.loop then next_song(true) else play_entry(e) end
+    if playing and e and e.loop then next_song(true) else play_entry(e) end
   elseif cmd == "next" then
     next_song()
+  elseif cmd == "next_stop" then
+    stop_play()
+    next_song(false)
   elseif cmd == "prev" then
     prev_song()
   elseif cmd == "stop" then
@@ -687,7 +703,7 @@ local function handle_remote()
     save_settings(true)
   else
     local n = cmd:match("^goto:(%d+)$")
-    if n then goto_i(tonumber(n), is_playing) end
+    if n then goto_i(tonumber(n), playing) end
   end
   reaper.DeleteExtState(REMOTE_KEY, "cmd", true)
 end
@@ -757,13 +773,31 @@ local function toolbar()
     end
 
     if reaper.ImGui_Button(ctx, "⏮ Prev") then prev_song() end
-    reaper.ImGui_SameLine(ctx)
-    if reaper.ImGui_Button(ctx, "▶ Play") then
+    local play_btn_label = "▶ Play"
+    local playing, paused = get_play_state()
+    if playing then
       local e = setlist.entries[current]
-      if is_playing and e and e.loop then next_song(true) else play_entry(e) end
+      if e and e.loop then
+        play_btn_label = "⏭ Skip Loop"
+      else
+        play_btn_label = "⏸ Pause"
+      end
+    end
+
+    if reaper.ImGui_Button(ctx, play_btn_label) then
+      local e = setlist.entries[current]
+      if playing then
+        if e and e.loop then
+          next_song(true)
+        else
+          reaper.OnPauseButton()
+        end
+      else
+        play_entry(e)
+      end
     end
     reaper.ImGui_SameLine(ctx)
-    if reaper.ImGui_Button(ctx, "⏸ Stop") then stop_play() end
+    if reaper.ImGui_Button(ctx, "⏹ Stop") then stop_play() end
     reaper.ImGui_SameLine(ctx)
     if reaper.ImGui_Button(ctx, "⏭ Next") then next_song() end
 
@@ -924,12 +958,31 @@ local function panel_show()
 
   if reaper.ImGui_Button(ctx, "⏮ Prev") then prev_song() end
   reaper.ImGui_SameLine(ctx)
-  if reaper.ImGui_Button(ctx, "▶ Play") then
+  local play_btn_label = "▶ Play"
+  local playing, paused = get_play_state()
+  if playing then
     local e = setlist.entries[current]
-    if is_playing and e and e.loop then next_song(true) else play_entry(e) end
+    if e and e.loop then
+      play_btn_label = "⏭ Skip Loop"
+    else
+      play_btn_label = "⏸ Pause"
+    end
+  end
+
+  if reaper.ImGui_Button(ctx, play_btn_label) then
+    local e = setlist.entries[current]
+    if playing then
+      if e and e.loop then
+        next_song(true)
+      else
+        reaper.OnPauseButton()
+      end
+    else
+      play_entry(e)
+    end
   end
   reaper.ImGui_SameLine(ctx)
-  if reaper.ImGui_Button(ctx, "⏸ Stop") then stop_play() end
+  if reaper.ImGui_Button(ctx, "⏹ Stop") then stop_play() end
   reaper.ImGui_SameLine(ctx)
   if reaper.ImGui_Button(ctx, "⏭ Next") then next_song() end
   reaper.ImGui_SameLine(ctx)
@@ -1106,9 +1159,10 @@ local function hotkeys_in_frame()
   end
 
   if reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Space()) then
-    if is_playing then
+    local playing, paused = get_play_state()
+    if playing then
       local e = setlist.entries[current]
-      if e and e.loop then next_song(true) else stop_play() end
+      if e and e.loop then next_song(true) else reaper.OnPauseButton() end
     else
       play_entry(setlist.entries[current])
     end
