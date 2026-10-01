@@ -462,10 +462,10 @@ local function save_set()
   if writef(path, table.concat(t,"\n")) then refresh_files() end
 end
 
-local function load_set_by_index(i)
-  if i<1 or i>#files then return end
+local function load_set_by_index(i, remap_regions_by_name)
+  if i<1 or i>#files then return false end
   local fn = files[i]
-  local txt = readf(path_join(DIR_SET, fn)); if not txt then return end
+  local txt = readf(path_join(DIR_SET, fn)); if not txt then return false end
   local nm = fn:gsub("%.reaplaylist%.txt$","")
   local entries = {}
   for line in txt:gmatch("[^\r\n]+") do
@@ -478,10 +478,56 @@ local function load_set_by_index(i)
       local cont = (parts[2] == "1" or parts[2] == "true")
       local name = (parts[3] and parts[3] ~= "") and parts[3] or nil
       local loop = (parts[4] == "1" or parts[4] == "true")
-      if ridx then entries[#entries+1] = {region_idx=ridx, continue=cont, name=name, loop=loop} end
+      if remap_regions_by_name and name then
+        local matching_region = R_by_name(name)
+        ridx = matching_region and matching_region.idx or nil
+      end
+      if ridx or name then
+        entries[#entries+1] = {region_idx=ridx, continue=cont, name=name, loop=loop}
+      end
     end
   end
-  if #entries>0 then setlist = {name=nm, entries=entries}; current=1 end
+  setlist = {name=nm, entries=entries}
+  current = 1
+  return true
+end
+
+-- Rescan regions and load the setlist matching the active project's filename
+-- whenever REAPER switches to another project.
+local last_project = nil
+local last_project_file = nil
+local has_seen_project = false
+
+local function load_active_project_setlist()
+  local project, project_file = reaper.EnumProjects(-1, "")
+  project_file = project_file or ""
+  if has_seen_project and project == last_project and project_file == last_project_file then
+    return
+  end
+
+  has_seen_project = true
+  last_project = project
+  last_project_file = project_file
+
+  scan_regions()
+  refresh_files()
+
+  local project_name = project_file:match("^.*[/\\](.-)$") or project_file
+  project_name = project_name:gsub("%.[Rr][Pp][Pp]$", "")
+  local expected_file = project_name:gsub("[^%w%-%._ ]", "_"):lower() .. ".reaplaylist.txt"
+
+  for i, fn in ipairs(files) do
+    if fn:lower() == expected_file then
+      selected_set_file = i
+      if load_set_by_index(i, true) then return end
+      break
+    end
+  end
+
+  -- Do not leave the previous project's songs active if there is no match.
+  setlist = {name = project_name ~= "" and project_name or "My Set", entries = {}}
+  current = 1
+  selected_set_file = 0
 end
 
 local function delete_set_by_index(i)
@@ -1180,6 +1226,8 @@ end
 -- ============================================================
 
 local function run_main_logic()
+  load_active_project_setlist()
+
   local playing,_ = get_play_state()
   is_playing = playing
 

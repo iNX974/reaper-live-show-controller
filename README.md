@@ -26,6 +26,7 @@ Zusätzliches, separates HUD:
 - **Setlist-Verwaltung**
   - Regions scannen, Songs hinzufügen, umsortieren, entfernen
   - Setlists als `*.reaplaylist.txt` speichern & laden
+  - Beim Wechsel zu einem gespeicherten Projekt Regionen neu scannen und `<Projektname>.reaplaylist.txt` aus dem konfigurierten Setlist-Ordner laden; ohne Treffer wird die aktuelle Setlist geleert
   - *Repair by name*: fehlende Region-IDs anhand der Namen wiederherstellen
 - **Loop-Funktion (pro Song/Region)**: Wiederholt einen Song nahtlos im Loop. Durch erneutes Drücken von Play/Space/Pause oder MIDI-Play/PlayToggle wird der Loop verlassen und direkt zum nächsten Song gesprungen.
 - **Show-Modus**
@@ -230,7 +231,7 @@ Optional separate HUD:
 
 ## Features
 
-- **Setlist management**: scan regions, add/reorder/remove, save/load `*.reaplaylist.txt`, name-based repair  
+- **Setlist management**: scan regions, add/reorder/remove, save/load `*.reaplaylist.txt`, name-based repair. While the main script is running, switching to a saved project rescans its regions and loads `<project-name>.reaplaylist.txt` from the configured setlist folder; if there is no match, the current setlist is cleared.  
 - **Per-song Loop function**: Loops a song seamlessly. Pressing Play/Space/Pause or sending MIDI Play/PlayToggle breaks the loop and jumps directly to the next song.
 - **Show Mode**: big display, Windowed/Fullscreen, play/pause controls with precise resume, **read-only** UI  
 - **Dynamic Play button**: Changes label to "Pause" (or "Skip Loop" if looping) dynamically during playback.
